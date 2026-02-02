@@ -186,10 +186,10 @@ class Scheduler(SchedulerInterface):
         # chunked prefills, prefix caching, speculative decoding,
         # and the "jump decoding" optimization in the future.
 
-        scheduled_new_reqs: list[Request] = []
-        scheduled_resumed_reqs: list[Request] = []
-        scheduled_running_reqs: list[Request] = []
-        preempted_reqs: list[Request] = []
+        scheduled_new_reqs: list[Request] = []  # 从 waiting 队列中取出的新请求
+        scheduled_resumed_reqs: list[Request] = [] # 从 waiting 队列中取出的 暂停运行（从 running 移动到 waiting 中的请求） 的请求 (恢复队列)
+        scheduled_running_reqs: list[Request] = [] # 从 running 队列中取出的正在运行的请求 (本次资源支持该请求 再次 迭代推理)
+        preempted_reqs: list[Request] = [] # 因资源不足，从 running 队列移动到 waiting 队列中的请求
 
         req_to_new_blocks: dict[str, KVCacheBlocks] = {}
         num_scheduled_tokens: dict[str, int] = {}
@@ -268,10 +268,13 @@ class Scheduler(SchedulerInterface):
 
                 # The request cannot be scheduled.
                 # Preempt the lowest-priority request.
+                # 将优先级低于 request 的请求放到 waiting 队列中, 并将其状态变更为 PREEMPTED（被中断）
                 if self.policy == SchedulingPolicy.PRIORITY:
+                    # 取出优先级最低的请求
                     preempted_req = max(
                         self.running,
-                        key=lambda r: (r.priority, r.arrival_time),
+                        # priority 数字越大优先级越低, arrival_time 约玩到达的请求优先级越低
+                        key=lambda r: (r.priority, r.arrival_time),  
                     )
                     self.running.remove(preempted_req)
                     if preempted_req in scheduled_running_reqs:
@@ -344,7 +347,7 @@ class Scheduler(SchedulerInterface):
 
         # Use a temporary RequestQueue to collect requests that need to be
         # skipped and put back at the head of the waiting queue later
-        skipped_waiting_requests = create_request_queue(self.policy)
+        skipped_waiting_requests = create_request_queue(self.policy)  # 从 waiting 队列中取出，但其依赖资源没有就绪的请求，放入该队列中
 
         # Next, schedule the WAITING requests.
         if not preempted_reqs:
@@ -400,6 +403,7 @@ class Scheduler(SchedulerInterface):
                 # Get already-cached tokens.
                 if request.num_computed_tokens == 0:
                     # Get locally-cached tokens.
+                    # --------- 获取 prefix KVCache ----------
                     new_computed_blocks, num_new_local_computed_tokens = (
                         self.kv_cache_manager.get_computed_blocks(request)
                     )
