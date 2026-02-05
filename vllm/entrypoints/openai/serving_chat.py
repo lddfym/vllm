@@ -228,9 +228,9 @@ class OpenAIServingChat(OpenAIServing):
                 if error_check_ret is not None:
                     return error_check_ret
                 (
-                    conversation,
-                    request_prompts,
-                    engine_prompts,
+                    conversation,  # 将 messages 中的多模信息用 special token 代替
+                    request_prompts, # 将 conversation 应用到 chat_template 后产生的 token_prompt 文本 (此处不是 token_ids)
+                    engine_prompts,  # 将 request_prompts 拆分为 prompt_token_ids, multi_modal_data, multi_modal_uuids
                 ) = await self._preprocess_chat(
                     request,
                     tokenizer,
@@ -272,7 +272,7 @@ class OpenAIServingChat(OpenAIServing):
 
                 if self.default_sampling_params is None:
                     self.default_sampling_params = {}
-
+                # 计算剩余最大 token 数 (此处图片用 special token 代替，而非 patch token_ids)
                 max_tokens = get_max_tokens(
                     max_model_len=self.max_model_len,
                     request=request,
@@ -312,7 +312,7 @@ class OpenAIServingChat(OpenAIServing):
                         params=sampling_params,
                         lora_request=lora_request,
                     )
-                else:
+                else: # # 将 promot (token_id) 中 多模数据的 placeholder (spacial token) 替换为 对应的 patch_token_ids
                     engine_request, tokenization_kwargs = await self._process_inputs(
                         request_id,
                         engine_prompt,

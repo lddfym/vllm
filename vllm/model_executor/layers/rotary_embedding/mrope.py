@@ -399,7 +399,7 @@ class MRotaryEmbedding(RotaryEmbedding):
         num_new_tokens: int,
     ):
         values = np.arange(
-            mrope_position_delta + context_len,
+            mrope_position_delta + context_len,  # = prefill 阶段最大的 position 值
             mrope_position_delta + context_len + num_new_tokens,
             dtype=out.dtype,
         )

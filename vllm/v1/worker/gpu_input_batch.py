@@ -734,7 +734,7 @@ class InputBatch:
             if batch_changed:
                 self.sampling_metadata = self._make_sampling_metadata()
             return
-
+        # 更新 logits processors 中的参数
         # For non-pooling models - generate and apply logitsprocs update;
         # reset batch update tracking.
         # Update sampling metadata if batch state is changed.

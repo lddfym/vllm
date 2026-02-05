@@ -387,7 +387,7 @@ class Processor:
                 mm_uuids = prompt.get("multi_modal_uuids")
             else:
                 mm_uuids = None
-
+        # 将 promot (token_id) 中 多模数据的 placeholder (spacial token) 替换为 对应的 patch_token_ids
         # Process inputs, which includes:
         # 1. Tokenize text prompt, with LoRA request if one exists.
         # 2. For multimodal models with a merged preprocessor, preprocess

@@ -692,9 +692,9 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin):
                 lora_request=new_req_data.lora_request,
             )
             self.requests[req_id] = req_state
-
+            # Multimodal Rotary Position Embedding
             # Only relevant for models using M-RoPE (e.g, Qwen2-VL)
-            if self.uses_mrope:
+            if self.uses_mrope:  # 此处的 M-RoPE 是给 language_model 使用的，而非 vision transformer 模型，在 vit 中 位置坐标 仅是单图的二维坐标 (qwen)
                 self._init_mrope_positions(req_state)
 
             reqs_to_add.append(req_state)
@@ -878,7 +878,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin):
                 use_audio_in_video = True
 
         assert supports_mrope(self.get_model()), "M-RoPE support is not implemented."
-
+        # qwen3_vl:  mrope_positions.shape=[3, seq_len] 每个 token 的 (t, h, w) 坐标值, 文本 token t=h=w
         req_state.mrope_positions, req_state.mrope_position_delta = (
             self.model.get_mrope_input_positions(
                 req_state.prompt_token_ids,
@@ -1541,10 +1541,10 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin):
             num_prompt_tokens = length_from_prompt_token_ids_or_embeds(
                 req.prompt_token_ids, req.prompt_embeds
             )
-
+            # 此刻说明该请求已经推理了部分 token, 此时属于 decoder 阶段（而非 prefill 阶段）
             if num_computed_tokens + num_scheduled_tokens > num_prompt_tokens:
-                prompt_part_len = max(0, num_prompt_tokens - num_computed_tokens)
-                completion_part_len = max(0, num_scheduled_tokens - prompt_part_len)
+                prompt_part_len = max(0, num_prompt_tokens - num_computed_tokens)  # num_computed_tokens 是 kv cache 中的 token 数
+                completion_part_len = max(0, num_scheduled_tokens - prompt_part_len)  # 已推理出的 token
             else:
                 prompt_part_len = num_scheduled_tokens
                 completion_part_len = 0
@@ -1567,7 +1567,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin):
                 # compute completion's mrope_positions on-the-fly
                 dst_start = mrope_pos_ptr
                 dst_end = mrope_pos_ptr + completion_part_len
-
+                # 此刻处于 decoder 阶段, decoder 阶段输出的 token 坐标是一维的。mrope_position_delta = mrope_positions.max() - (len(token_ids) - 1)
                 MRotaryEmbedding.get_next_input_positions_tensor(
                     out=self.mrope_positions.np,
                     out_offset=dst_start,
@@ -2129,9 +2129,9 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin):
             and not self.model_config.is_encoder_decoder
         ):
             # Run the multimodal encoder if any.
-            self._execute_mm_encoder(scheduler_output)
-            mm_embeds, is_mm_embed = self._gather_mm_embeddings(scheduler_output)
-
+            self._execute_mm_encoder(scheduler_output)  # 执行 vit
+            mm_embeds, is_mm_embed = self._gather_mm_embeddings(scheduler_output) # 根据 num_scheduled_tokens 截取 mm_embeds (vit 的执行结果)
+            # 此处仅对文本 token 进行 embedding，然后将 vit 的结果拼到 text 的 embedding 中
             # NOTE(woosuk): To unify token ids and soft tokens (vision
             # embeddings), we always use embeddings (rather than token ids)
             # as input to the multimodal model, even when the input is text.
@@ -2468,7 +2468,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin):
             (
                 num_scheduled_tokens,
                 input_ids,
-                inputs_embeds,
+                inputs_embeds,  # 文本 token 的 embedding + vit output (mm_embeds)
                 positions,
                 intermediate_tensors,
                 model_kwargs,

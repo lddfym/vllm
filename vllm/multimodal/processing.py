@@ -1847,7 +1847,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
             mm_data_items=mm_data_items,
             mm_hashes=mm_hashes,
         )
-
+        # 这里产生 pixel value
         # NOTE: `prompt` does not correspond to `mm_missing_data_items`,
         # so we can't apply prompt updates until the new multimodal
         # items are combined with the cached multimodal items
